@@ -86,25 +86,34 @@
 | RAG | 只建壳子（面试讲套路） | ✅ |
 | 流式 | 真流式（协议兼容现有前端） | ✅ |
 | 测试 | agent 循环 + 工具层 pytest | ✅ |
-| 主循环 | 自研 harness 循环 + langchain-openai 薄客户端 | ✅ |
+| 主循环 | langchain v1 create_agent + 自研三中间件（R5 精化，与课程一致） | ✅ |
+| PRD | v1.0 已审核通过（2026-09-27），进入 SPEC 编写 | ✅ |
+| SPEC | v1.0 产出（docs/SPEC.md，18 章），等用户审定 | ⏳ |
 | 护栏 | 工具签名 pydantic 强校验为主，prompt 配合，checklist 注入 | ✅ |
 | 流程知识 | markdown playbook + 工具参数模型 | ✅ |
 | API | 完全兼容 csb，跑 18082，前端零改动 | ✅ |
 | 复用 | 抄 infra/Action/provider，重写 engine 与 prompts | ✅ |
 | 持久化 | 只存消息历史，业务数据现查现用 | ✅ |
-| 评测 | 要建自动评测，规模与判分方式 Round 3 定 | ⏳ |
+| 评测 | 50 条分维度标注集 + HTTP 黑盒双版跑分 | ✅ |
+| 判分 | 规则断言（确定性维度）+ LLM-as-judge（主观维度） | ✅ |
+| 对齐策略 | 轻量对齐（保自研轻量边界，吸收课程 harness 概念） | ✅ |
+| 课程资料 | day11 最终代码 4 包验证解压完毕；md 课件未下（可选补） | ✅ |
 
 ## 5. 待办池
 
-- [ ] ⏳ **等用户**：下载课程资料的 2_resource + 3_code + 4_other（约 25MB，13GB 视频不用下）到本地（如 `D:\Code\VSCode\ecommerce_customer_ls\course-v2\`），告知路径
-- [ ] ⏳ **Round 4 待决**：与官方 V2.0 的对齐策略（完整跟课 / 轻量对齐 / 代码对照）
-- [ ] 对齐后更新架构方案（吸收课程概念：协调者 / AgentRun / Skills / 事实检验 / 异常治理），再进 M0
-- [ ] M0：dainshang2 残缺骨架 commit 存档后清场重写
-- [ ] M1：harness 最小闭环（循环 + 1 工具 + 消息历史 + API 兼容 + pytest）
-- [ ] M2：全工具 + playbook + 护栏；M3：真流式；M4：RAG 壳子
+- [x] 用户下载课程代码（day11 最终版 4 包，验证并解压到 ../course-v2/extracted/）
+- [x] Round 4：对齐策略 = 轻量对齐
+- [x] 课程参考实现精读（docs/course-ai-service-notes.md）+ 最终架构方案（第 8 节）
+- [x] M0-1：dainshang2 旧骨架存档 commit（a199c2b）
+- [x] Round 5：循环改用 create_agent + 三中间件；8.3 两处精化确认；先 PRD 后代码
+- [x] PRD v1.0 产出并经用户审核通过（2026-09-27，全部接受）；v1.1 增补契约核实修订（见 PRD 13.5 末行）
+- [x] SPEC v1.0 产出（docs/SPEC.md，18 章）
+- [ ] ⏳ **等用户审定 SPEC** → M0-2 清场 + M1 开工
+- [ ] M1：harness 最小闭环（循环 + 工具信封 + 1 个工具 + 消息历史 + API 兼容 + pytest）
+- [ ] M2：全工具 + playbook（按需加载）+ 三层护栏；M3：真流式；M4：RAG 壳子
 - [ ] M5：50 条评测集 + 跑分脚本 + 双版对比表
 - [ ] M6：README / 架构图 / 面试材料
-- [ ] RAG 壳子设计要点：Provider 接口 + 假检索实现（面试可讲：换向量库只换 Provider）
+- [x] 补下课件：day07~11 课件 + 面试指南 + Harness 概念文档 + excalidraw 笔记（../course-v2/2_resource、4_other/）
 
 ---
 
@@ -126,4 +135,67 @@
 
 访问能力边界：**浏览目录 ✅**（提取码已验证，能列出全部 228 个文件）；**直接下载 ❌**（百度 sign 反爬，未登录会话拿不到 dlink 签名，share/download 与 tplconfig 均 errno=2）。
 
-对应关系：csb ≈ 课程 V1 的电商客服（workflow 版）；dainshang2 的目标 ≈ V2.0 的 ai-service（harness+智能体）。已定方案（自研循环/工具签名护栏/playbook/只存历史）与课程方向一致，但课程另有协调者、两阶段确认、Skills、事实检验、异常治理等概念，待 Round 4 定对齐深度。
+对应关系：csb ≈ 课程 V1 的电商客服（workflow 版）；dainshang2 的目标 ≈ V2.0 的 ai-service（harness+智能体）。
+
+**下载验证（2026-09-27 晚）**：用户下载了 day11 最终代码 4 件套到 `../course-v2/3_code/`（ai-service.zip 410KB / backend.zip 84KB / customer-service.7z 161KB / frontend.zip 50KB，字节数与网盘清单一致）。三个 zip testzip 通过，7z 用 bsdtar 验证通过，已解压到 `../course-v2/extracted/`（ai-service 242 文件 / customer-service 186 项 / backend 27 / frontend 23）。**完整性结论：最终代码齐全 ✅；md 课件（2_resource）未下载**——day07《面试指南》《Harness_Engineering 概念与原理》和 day08~11 课件建议补下（可选，不阻塞开工）。
+
+**Round 4 决定（2026-09-27）**：对齐策略 = **轻量对齐**——保持已定轻量边界（单服务/API 兼容/只存历史/MySQL），吸收课程 harness 成熟概念。
+
+---
+
+## 7. 课程参考实现精读（摘要）
+
+完整笔记见 [docs/course-ai-service-notes.md](course-ai-service-notes.md)。要点：
+
+- 课程的循环本体是 langchain v1 `create_agent` + 中间件（@dynamic_prompt / SkillScopeMiddleware / ToolCallLimitMiddleware），**"harness"的价值在中间件 + 工具/校验/技能那一圈**。我们自研循环 = 把这三个中间件的职责自己实现，概念可一一对应。
+- 最值得吸收的 8 个设计：①ToolResult 信封（工具永不向模型抛异常）②工具调用快照落库 ③事实检验纯函数（提取/比较/纠错反馈）④页面动作服务端白名单 ⑤写操作两阶段确认 ⑥纠错重试（≤2 次、复用全轨迹）⑦AgentRun 观测表（含 prompt_version）⑧技能工具收窄。
+- 课程模型是 deepseek-chat；我们是 qwen 百炼，仅配置差异。
+
+## 8. 最终架构方案（轻量对齐版 · 2026-09-27 · 待确认）
+
+### 8.1 设计原则
+
+- **边界**：单服务（对话引擎+agent 一体），API 契约照抄 csb，前端零改动；MySQL 存消息历史 + 两张运行表；不引入 pg / Redis / turn worker / 服务间 JWT（day01~06 生产化重制明确不吸收）。
+- **循环**：langchain v1 create_agent 为骨架 + 自研三个中间件（动态提示 / 技能工具收窄 / 调用上限），与课程实现保持一致（R5 精化）。
+- **命名与课程对齐**（面试无缝衔接）：AgentRun / ToolResult / 工具快照 / Skill(playbook) / 事实检验 / 纠错循环 / 可纠正 vs 终态错误码。
+
+### 8.2 模块清单（app/ 下）
+
+| 模块 | 内容 | 来源 |
+|---|---|---|
+| `api/` | 路由 + 交互模型（契约照抄 csb；WS 事件兼容） | 抄 csb |
+| `harness/` | middleware/（dynamic_prompt、skill_scope、call_limit=8 三中间件）；executor.py（执行 + 纠错循环）；run.py（AgentRun + agent_tool_calls 落库）；tool_executor.py（工具执行信封）；context.py（三层历史裁剪：条数 30 → 字符预算 12k → 从首条 user 保留；含未完成任务摘要注入）；events.py（WS 事件装配） | 吸收课程 |
+| `agent/` | prompts（三层：全局 BASE_PROMPT / playbook 动态层 / 动作索引）；correction.py（纠错反馈消息，≤2 次重跑、复用全轨迹） | 吸收课程 |
+| `skills/` | catalog（技能：商品 / 订单 / 物流售后 / 退款 / 政策问答 + 闲聊兜底）；definition（guidance 四段式：查询入口/工具选择/可信依据/边界处理）；middleware（未激活只给 load_playbook，激活后给 skill.tools） | 吸收课程 |
+| `tools/` | registry（ToolDefinition + category 标签）；business/（查订单/查物流/提交退款/相似推荐，由 csb Action 改造）；envelope（ToolResult 泛型信封）；action.py（页面动作白名单：模型只报 code+resource_id，服务端拼 URL，资源必须先被成功查询）；knowledge.py（RAG 壳） | 吸收课程 + 抄 csb |
+| `rules/` | fact.py（编号/金额/状态三类事实提取与比较，改造课程实现） | 吸收课程 |
+| `errors/` | Correctable（→纠错循环）vs Terminal（→FAILED+稳定错误码）二分 | 吸收课程 |
+| `memory/` | 消息历史（MySQL）；agent_runs / agent_tool_calls 两张运行表 | 吸收课程 |
+| `infra/` | llm_client（langchain-openai 薄客户端，qwen 百炼）/ config / db | 抄 csb |
+
+### 8.3 相对 Round 2 决策的两处精化（需要确认）
+
+1. **playbook 交付方式**：Round 2 定的"全量注入 system prompt" → 精化为课程式"**目录常驻 + load_playbook 工具按需加载 + 工具收窄**"。省 token、降选错工具率，中间件模式与课程一致。
+2. **护栏从一层变三层**：Round 2 定的"护栏在工具签名里" → ①工具参数 pydantic 强校验（原方案）②事实检验（回复中的编号/金额/状态必须来自本 Run 成功工具结果，否则纠错重跑）③写操作（提交退款）**对话级二次确认**——agent 复述订单+退款原因，用户下一条消息确认后才调工具。课程的 UI 级 confirm 接口因"前端零改动"约束改为对话级实现。
+
+### 8.4 吸收 / 不吸收清单
+
+- **吸收**：ToolResult 信封 / 工具快照落库 / 事实检验纯函数 / 动作白名单 / 纠错循环（≤2、复用轨迹）/ AgentRun+用量观测（prompt_version）/ Skill 收窄 / 三层历史裁剪 / 三层 prompt / 错误码二分。
+- **不吸收（轻量边界）**：pg、Redis pub/sub、turn worker 异步领取、JWT 服务间鉴权、UI 级 confirm/cancel 接口（改对话级）、ToolStrategy（用 bind_tools 原生结构化输出）。
+
+---
+
+## 9. Round 5（2026-09-27 · 已答）
+
+| # | 问题 | 决定 |
+|---|---|---|
+| Q1 | 缺失课件 | 已下载齐全：day07~11 课件 + 面试指南 + Harness 概念文档 + excalidraw 笔记（../course-v2/2_resource 与 4_other/；day08 课件已从误拼目录 2_resouce 归位） |
+| Q2 | 循环本体 | **改用 langchain v1 create_agent + 自研三中间件**（动态提示 / 技能工具收窄 / 调用上限），与课程保持一致。R2-Q1 的"自研 while 循环"就此精化：自研重心在 harness 中间件与校验层，不在循环骨架 |
+| Q3 | 8.3 两处精化 | 确认采纳（playbook 按需加载 + 三层护栏含退款对话级二次确认） |
+| Q4 | 开工节奏 | **先写 PRD 汇报审核，通过后再写代码**（采用 prd-craft 工作流） |
+
+推论与影响：
+
+- 依赖不变：csb 的 langchain>=1.3 已内置 create_agent / middleware / langgraph Command。
+- 简历措辞调整："基于 langchain v1 agent 中间件机制自研工程化 harness 层（工具信封 / 快照取证 / 事实检验 / 纠错闭环 / 技能收窄）"。
+- 8.1/8.2 架构方案已同步修订（middleware/ 代替 loop.py）。
