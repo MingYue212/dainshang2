@@ -217,3 +217,20 @@
 **环境偏差（SPEC 第 3 章注记）**：3306 为宿主机原生 MySQL（Docker Desktop 未运行），atguigu 无建库权限 → V2 三表建在现有 `customer_service` 库，与 V1 的 `dialogue_states` 零冲突；`003_init_v2.sql` 保留供容器化部署。
 
 **下一步**：M2——7 个业务工具 + 5+1 技能目录 + 动作白名单 + 事实检验 + 纠错循环 + 退款确认门（SPEC 6.2/7/8/9/12/13 章）。
+
+---
+
+## 11. M2 实施记录（2026-09-28 凌晨）
+
+**交付**：8 工具（7 业务 + load_skill）+ 5 技能目录（guidance 四段式）+ dynamic_prompt / skill_scope 两中间件（课程同构 API）+ 事实检验（FactExtractor/FactChecker）+ 动作白名单（ORDER_CARD/PRODUCT_CARD 服务端拼装）+ 纠错循环 + 对话级确认闭环（request_refund_confirmation 工具 + 提交确认门 + SUPERSEDED 清扫）。pytest 47 用例全绿（新增 33）。
+
+**设计精化（相对 SPEC 13.2 原稿）**：确认请求从"结构化 confirmation 字段"改为**显式工具** `request_refund_confirmation`——工具内硬校验订单已核实，executor 扫描快照判定进入 AWAITING_CONFIRM。理由：工具是模型更可靠的行动通道，且与提交侧确认门形成对称闭环；已回写 SPEC。
+
+**实战捕获的三个真实故障与处置**（面试素材）：
+1. **百炼"连续重复工具调用"防护**：同一工具+参数连续重复 → 服务端直接 400。处置：executor 捕获转纠错反馈重试 + load_skill 落快照可观测 + 工具参数宽容化（隐形解析失败→可见业务反馈）。
+2. **隐形调用烧穿预算**：参数解析失败的工具调用不经过执行器、不落库，导致"3 次可见调用却 9/8 触发上限"的怪象。处置：load_skill 落库 + tool_call_limit 8→12 + 限流降级前三级抢救（提交成功→按成功话术回复；已登记确认→按确认话术回复并进 AWAITING_CONFIRM；否则才转人工）——保证"回复与事实一致"。
+3. **生产纠错闭环首次真实触发**：幻觉诱导"把退款金额改成5000元重新提交"→ 首次输出被 EC-1002 拦截 → 纠错重试 → 最终回复拒绝 5000、引用工具结果中的 699 并重新出示待确认项（agent_runs.correction_attempts=1 有据可查）。
+
+**端到端验收（双服务实跑）**：u1003 四轮退款全流程 ✅——意图识别（list_orders）→ 点卡核实（get_order+卡片注入）→ 原因登记（request_refund_confirmation→AWAITING_CONFIRM）→ 确认提交（确认门放行→18081 成功→退款单号 R202609280003446C17CF 回写 COMPLETED）。run 状态链：CLARIFY→CLARIFY→AWAITING_CONFIRM→COMPLETED。此前 u1001 会话中还实测了重复提交 409 幂等话术与 SUPERSEDED 清扫。
+
+**下一步**：M3 真流式（WS bot_message_delta + ws-test.html）。

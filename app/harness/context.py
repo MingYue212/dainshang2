@@ -1,9 +1,6 @@
-"""上下文构建（SPEC 11 章）：三层历史裁剪 + 对象消息注入。
+"""上下文构建（SPEC 11 章）：三层历史裁剪 + 对象消息注入 + 待确认摘要注入。"""
 
-待确认摘要注入（AWAITING_CONFIRM）与未完成任务摘要在 M2 随确认门一起接入。
-"""
-
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from app.conf.config import settings
 from app.memory.models import ChatMessage
@@ -55,8 +52,23 @@ def to_lc_message(row: ChatMessage) -> BaseMessage:
     return AIMessage(content=text)
 
 
+def build_pending_confirmation_summary(pending_result: dict) -> str:
+    """AWAITING_CONFIRM 摘要注入（SPEC 11.4）。"""
+    order_id = pending_result.get("order_id", "")
+    reason = pending_result.get("reason", "")
+    return (
+        f"[待确认操作] 用户此前申请为订单 {order_id} 提交退款（原因：{reason}），尚未获得确认。"
+        "若用户本轮消息表示确认，请调用 submit_refund_application；"
+        "若要修改，请按新信息重新核实并再次请求确认；"
+        "若是无关话题，请正常回答新问题（该待确认将自动作废）。"
+    )
+
+
 def compile_messages(
-    history: list[ChatMessage], user_text: str | None, obj_payload: dict | None
+    history: list[ChatMessage],
+    user_text: str | None,
+    obj_payload: dict | None,
+    pending_summary: str | None = None,
 ) -> list[BaseMessage]:
     msgs = trim_history([to_lc_message(row) for row in history])
     current = user_text or ""
@@ -64,5 +76,7 @@ def compile_messages(
         current = (current + "\n" if current else "") + format_object(obj_payload)
     if not current:
         current = "（用户发送了空消息）"
+    if pending_summary:
+        msgs.append(SystemMessage(content=pending_summary))
     msgs.append(HumanMessage(content=current))
     return msgs

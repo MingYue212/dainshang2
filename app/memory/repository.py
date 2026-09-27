@@ -112,3 +112,49 @@ async def record_tool_call_end(
     row.failure_type = failure_type
     row.latency_ms = latency_ms
     await session.flush()
+
+
+async def load_tool_snapshots(session, run_id: int):
+    """按 run_id 读取全部工具调用快照（含失败）——事实检验与动作白名单的证据源。"""
+    from sqlalchemy import select
+
+    from app.harness.snapshot import ToolCallSnapshot
+
+    rows = await session.execute(
+        select(AgentToolCall)
+        .where(AgentToolCall.run_id == run_id)
+        .order_by(AgentToolCall.id.asc())
+    )
+    return tuple(
+        ToolCallSnapshot(
+            tool_call_id=row.tool_call_id,
+            tool_name=row.tool_name,
+            arguments=row.arguments or {},
+            result=row.result,
+            success=bool(row.success),
+            failure_type=row.failure_type,
+        )
+        for row in rows.scalars()
+    )
+
+
+async def save_message_tool_call(
+    session,
+    *,
+    run_id: int,
+    tool_call_id: str,
+    tool_name: str,
+    arguments: dict,
+    result: dict | None,
+) -> None:
+    """不经信封执行器的轻量快照（如 load_skill 这类控制类工具）。"""
+    row = AgentToolCall(
+        run_id=run_id,
+        tool_call_id=tool_call_id,
+        tool_name=tool_name,
+        arguments=arguments,
+        result=result,
+        success=True,
+    )
+    session.add(row)
+    await session.flush()

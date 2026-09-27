@@ -214,9 +214,9 @@ CREATE TABLE IF NOT EXISTS agent_tool_calls (
 | history_message_limit | 30 | 是 | PRD 9.3 |
 | history_character_budget | 12000 | 是 | PRD 9.3 |
 | max_correction_attempts | 2 | 是 | PRD 9.3 |
-| tool_call_limit | 8 | 是 | PRD 9.3 |
+| tool_call_limit | 12（M2 调优：8 会因模型偶发参数解析失败调用提前降级） | 是 | PRD 9.3 |
 | max_llm_calls_per_turn | 4 | 是 | NFR-03 成本护栏（executor 计数） |
-| prompt_version | "v2-agent-1.0.0" | 否（代码常量） | prompt 变更必须升版本 |
+| prompt_version | "v2-agent-1.1.0"（M2：BASE_PROMPT 增写操作确认节 + confirmation 字段） | 否（代码常量） | prompt 变更必须升版本 |
 | digital_human_gateway | 同 V1 默认值 | 是 | 14.3 透传 |
 
 ## 5. 领域模型与错误体系
@@ -511,9 +511,13 @@ Run#3: 用户"确认" → 注入摘要 → 调 submit_refund_application(确认�
         → 18081 返回 request_id → Run#3 COMPLETED；Run#2 由确认结果回写 COMPLETED
 ```
 
-### 13.2 进入 AWAITING_CONFIRM 的判定（executor 内，硬规则）
+### 13.2 进入 AWAITING_CONFIRM 的判定（M2 实施精化：工具通道）
 
-`output.reply_type=ANSWER 且 output.content 含复述意图`——**不靠猜**：executor 检查"本 Run 已成功 get_order（订单在本 Run 有快照）+ 会话历史中已有原因类回答 + agent 本轮未调用写工具"三条件同时满足，且 REFUND 技能激活。满足即强制 AWAITING_CONFIRM，并把回复后缀固定为确认问句模板（"将提交退款：订单 {id}，原因：{reason}，确认吗？"）。
+确认请求走**显式工具** `request_refund_confirmation(order_id, reason)`，不再依赖对回复文本的意图猜测：
+
+1. 模型核实订单（get_order 成功）、问清原因后调用该工具；工具内硬校验"order_id 在本 Run 被 get_order 成功查询"，未核实即 BUSINESS 失败；
+2. 工具成功 → 快照落库；executor 在 ainvoke 结束后扫描快照，检测到该工具成功记录 → 本 Run 置 AWAITING_CONFIRM（result 存 order_id/reason）；
+3. 该设计使"进入确认态"成为模型可显式表达的工具决策，且与提交侧确认门形成对称闭环；也规避了模型偶发连续发出参数解析失败调用时（百炼 400/工具上限）确认意图丢失的问题。
 
 ### 13.3 确认门（submit_refund_application 薄壳内）
 
@@ -613,6 +617,7 @@ query `sender_id`；响应 `{sender_id, msgs:[{session_id?, role:"user"|"bot", c
 | 项 | 状态 |
 |---|---|
 | qwen 三项能力（response_format / parallel_tool_calls） | ✅ M1 实测：bind_tools ✅、parallel_tool_calls=False ✅、ToolStrategy ✅——须**构造器级** `extra_body={"enable_thinking": False}`（thinking 模式不支持 tool_choice=required；经 bind() 传入无效）；ProviderStrategy（native json_schema）该模型不支持，勿用。证据：scripts/probe_qwen.py |
+| **百炼"连续重复工具调用"防护** | ⚠️→✅ M2 实测：同一工具+参数在连续轮次重复出现时百炼直接 400。处置：①executor 捕获该 400 转为一次纠错反馈重试；②控制类工具（load_skill）也落快照保证可观测；③工具参数宽容化（隐形解析失败 → 可见业务反馈） |
 | 建库授权 | ✅ M1 实测：3306 为宿主机原生 MySQL 且 atguigu 无建库权限 → 三表落于 customer_service 库（第 3 章注记） |
 | 状态词中文映射表固化 | ⚠️ M2（以 18081 seed 全集为准，已列入 12.2） |
 | 📌 催发货工具（POST /orders/{id}/shipping-reminders，18081 已具备） | 本期不做；是第二个写操作演示确认门的理想候选 |

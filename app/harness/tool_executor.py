@@ -18,6 +18,9 @@ logger = logging.getLogger(__name__)
 
 # executor 在 ainvoke 前设置，工具薄壳内读取——工具无需感知会话 plumbing
 current_run_id: ContextVar[int | None] = ContextVar("current_run_id", default=None)
+current_conversation_id: ContextVar[str | None] = ContextVar(
+    "current_conversation_id", default=None
+)
 
 GENERIC_SERVICE_MESSAGE = "订单服务暂时不可用，请稍后再试"
 
@@ -39,10 +42,12 @@ async def execute_tool(
     arguments: dict,
     runner,
     schema: TypeAdapter,
+    ok_message: str = "ok",
 ) -> str:
     """执行一个业务工具调用并返回信封 JSON 字符串。
 
-    runner: 零参协程工厂（业务取数）；schema: TypeAdapter（data 结构校验）。
+    runner: 零参协程工厂（业务取数）；schema: TypeAdapter（data 结构校验）；
+    ok_message: 成功信封的话术（可携带对模型的后续行为指引）。
     """
     run_id = current_run_id.get()
     tool_call_id = uuid.uuid4().hex
@@ -72,7 +77,7 @@ async def execute_tool(
         validated = schema.validate_python(raw)
         data = schema.dump_python(validated, mode="json")
         success = True
-        message = "ok"
+        message = ok_message
     except Exception as exc:  # noqa: BLE001——信封化是本模块职责
         failure_type, message = classify_failure(exc)
 
@@ -84,7 +89,8 @@ async def execute_tool(
                 await record_tool_call_end(
                     session,
                     row_id,
-                    result=None if success else {"message": message},
+                    # 成功存业务数据（事实检验的证据源），失败存失败话术
+                    result=data if success else {"message": message},
                     success=success,
                     failure_type=failure_type.value if failure_type else None,
                     latency_ms=latency_ms,
