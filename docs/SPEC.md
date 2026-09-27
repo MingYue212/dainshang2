@@ -147,6 +147,8 @@ dainshang2/
 
 新增库 `customer_service_v2`（初始化脚本放 `../docker/mysql/initdb/003_init_v2.sql`，父目录 compose 已挂载 initdb，M1 核实挂载与建库授权；脚本幂等）。
 
+> **M1 环境实测修订（2026-09-27）**：本机 3306 为宿主机原生 MySQL（Docker Desktop 未运行），`atguigu` 用户无建库权限。V2 三表实际建在现有 `customer_service` 库（库内仅 V1 的 `dialogue_states`，零表名冲突），`.env` DATABASE_URL 指向该库；`003_init_v2.sql` 保留，供将来容器化部署时建独立库使用。
+
 ```sql
 CREATE DATABASE IF NOT EXISTS customer_service_v2 DEFAULT CHARSET utf8mb4;
 USE customer_service_v2;
@@ -610,8 +612,8 @@ query `sender_id`；响应 `{sender_id, msgs:[{session_id?, role:"user"|"bot", c
 
 | 项 | 状态 |
 |---|---|
-| qwen 对 response_format / parallel_tool_calls 的支持 | ⚠️ M1 首测，回退方案见 5.3/6.2 |
-| initdb 挂载与建库授权 | ⚠️ M1 核实父目录 compose |
+| qwen 三项能力（response_format / parallel_tool_calls） | ✅ M1 实测：bind_tools ✅、parallel_tool_calls=False ✅、ToolStrategy ✅——须**构造器级** `extra_body={"enable_thinking": False}`（thinking 模式不支持 tool_choice=required；经 bind() 传入无效）；ProviderStrategy（native json_schema）该模型不支持，勿用。证据：scripts/probe_qwen.py |
+| 建库授权 | ✅ M1 实测：3306 为宿主机原生 MySQL 且 atguigu 无建库权限 → 三表落于 customer_service 库（第 3 章注记） |
 | 状态词中文映射表固化 | ⚠️ M2（以 18081 seed 全集为准，已列入 12.2） |
 | 📌 催发货工具（POST /orders/{id}/shipping-reminders，18081 已具备） | 本期不做；是第二个写操作演示确认门的理想候选 |
 | 📌 真向量库 Provider（bge-m3 + FAISS/ES） | 接口已预留，换实现即可 |

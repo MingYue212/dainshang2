@@ -88,7 +88,7 @@
 | 测试 | agent 循环 + 工具层 pytest | ✅ |
 | 主循环 | langchain v1 create_agent + 自研三中间件（R5 精化，与课程一致） | ✅ |
 | PRD | v1.0 已审核通过（2026-09-27），进入 SPEC 编写 | ✅ |
-| SPEC | v1.0 产出（docs/SPEC.md，18 章），等用户审定 | ⏳ |
+| SPEC | v1.0 已审定（2026-09-27 用户通过）；M1 实施中产生的修订已回写 SPEC | ✅ |
 | 护栏 | 工具签名 pydantic 强校验为主，prompt 配合，checklist 注入 | ✅ |
 | 流程知识 | markdown playbook + 工具参数模型 | ✅ |
 | API | 完全兼容 csb，跑 18082，前端零改动 | ✅ |
@@ -108,8 +108,9 @@
 - [x] Round 5：循环改用 create_agent + 三中间件；8.3 两处精化确认；先 PRD 后代码
 - [x] PRD v1.0 产出并经用户审核通过（2026-09-27，全部接受）；v1.1 增补契约核实修订（见 PRD 13.5 末行）
 - [x] SPEC v1.0 产出（docs/SPEC.md，18 章）
-- [ ] ⏳ **等用户审定 SPEC** → M0-2 清场 + M1 开工
-- [ ] M1：harness 最小闭环（循环 + 工具信封 + 1 个工具 + 消息历史 + API 兼容 + pytest）
+- [x] SPEC 审定通过（2026-09-27）；M0-2 清场重建完成
+- [x] **M1 最小闭环完成（2026-09-27）**：20 个源文件 + DDL + 探针；pytest 14 全绿；qwen 三项实测出结论；端到端冒烟通过（对话/卡片注入/history/落库溯源/tokens 观测）
+- [ ] **M2 进行中**：全工具（7 个）+ 技能目录（5+1）+ 动作白名单 + 事实检验 + 纠错循环 + 确认门
 - [ ] M2：全工具 + playbook（按需加载）+ 三层护栏；M3：真流式；M4：RAG 壳子
 - [ ] M5：50 条评测集 + 跑分脚本 + 双版对比表
 - [ ] M6：README / 架构图 / 面试材料
@@ -199,3 +200,20 @@
 - 依赖不变：csb 的 langchain>=1.3 已内置 create_agent / middleware / langgraph Command。
 - 简历措辞调整："基于 langchain v1 agent 中间件机制自研工程化 harness 层（工具信封 / 快照取证 / 事实检验 / 纠错闭环 / 技能收窄）"。
 - 8.1/8.2 架构方案已同步修订（middleware/ 代替 loop.py）。
+
+---
+
+## 10. M1 实施记录（2026-09-27）
+
+**交付**：清场后按 SPEC 第 2 章重建目录；20 个源文件（conf/domain/infra/memory/tools/harness/agent/api/service/tests/scripts）+ `003_init_v2.sql` + `scripts/probe_qwen.py`。pytest 14 用例全绿。
+
+**qwen 三项实测结论**（详见 SPEC 18 章）：
+1. `bind_tools` ✅、`parallel_tool_calls=False` ✅；
+2. `ToolStrategy` 结构化输出 ✅，但必须**构造器级** `extra_body={"enable_thinking": False}`——qwen thinking 模式不支持 `tool_choice=required`，且该参数经 `bind()` 传入无效（已固化进 `app/infra/llm.py`）；
+3. `ProviderStrategy`（native json_schema）不可用，弃用。
+
+**端到端冒烟**：文本对话 ✅；对象消息注入上下文生效（模型正确复述卡片里的订单号/状态/金额）✅；history 字段级兼容 V1 ✅；chat_messages 落库带 run_id 溯源 ✅；agent_runs 记录 state/reply_type/latency/tokens（修了 UsageMetadataCallbackHandler 的 usage_metadata 按 model_name 分组导致 tokens 为空的问题）✅。
+
+**环境偏差（SPEC 第 3 章注记）**：3306 为宿主机原生 MySQL（Docker Desktop 未运行），atguigu 无建库权限 → V2 三表建在现有 `customer_service` 库，与 V1 的 `dialogue_states` 零冲突；`003_init_v2.sql` 保留供容器化部署。
+
+**下一步**：M2——7 个业务工具 + 5+1 技能目录 + 动作白名单 + 事实检验 + 纠错循环 + 退款确认门（SPEC 6.2/7/8/9/12/13 章）。

@@ -1,79 +1,74 @@
+"""对外契约端点（SPEC 14 章）：/api/chat、/api/chat/history、/api/digital-human/credentials。
+
+WS /ws/chat 在 M3 随真流式接入（bot_message_delta 事件）。
+"""
+
 import uuid
 
 from fastapi import APIRouter
 
-from app.api.domain.message import MsgType, ProcessResult, UserMsg
-from app.api.schemas import ChatHistoryResponse, ChatRequest, ChatResponse
+from app.api.schemas import (
+    BotMsgResponse,
+    ChatHistoryResponse,
+    ChatObjectPayload,
+    ChatRequest,
+    ChatResponse,
+    HistoryMsgResponse,
+)
+from app.conf.config import settings
+from app.domain.messages import MsgObject, ProcessResult
+from app.infra.db import SessionLocal
+from app.memory.repository import load_history
+from app.service.dialogue_service import process_chat
 
 router = APIRouter()
 
 
-@router.get("/api/chat", response_model=ChatResponse)
-async def chat(
-    chat_request: ChatRequest,
-):
-    # 1.将ChatRequest转换为UserMsg（交互模型-->领域模型）
-    user_msg = _build_user_message(chat_request)
+def to_chat_response(result: ProcessResult) -> ChatResponse:
+    """领域结果 → 交互契约（纯转换，单测锁定字段级兼容）。"""
+    msgs = [
+        BotMsgResponse(
+            text=m.text,
+            object=(
+                ChatObjectPayload(**m.object.model_dump()) if m.object else None
+            ),
+        )
+        for m in result.msgs
+    ]
+    return ChatResponse(sender_id=result.sender_id, msg_id=result.msg_id, msgs=msgs)
 
 
-    # 2.调用DialogueService处理消息
-    process_result = await dialogue_service.process_message(user_msg)
+@router.post("/api/chat", response_model=ChatResponse)
+async def chat(req: ChatRequest) -> ChatResponse:
+    msg_id = req.msg_id or str(uuid.uuid4())
+    obj = MsgObject(**req.object.model_dump()) if req.object else None
+    result = await process_chat(req.sender_id, msg_id, req.text, obj)
+    return to_chat_response(result)
 
-    # 3.将ProcessResult转换为ChatResponse（领域模型-->交互模型）
-    chat_response = _build_chat_response(process_result)
+
+@router.get("/api/chat/history", response_model=ChatHistoryResponse)
+async def history(sender_id: str) -> ChatHistoryResponse:
+    async with SessionLocal() as session:
+        rows = await load_history(session, sender_id, limit=200)
+    msgs = [
+        HistoryMsgResponse(
+            session_id=sender_id,
+            role=row.role,
+            create_time=row.created_at.timestamp(),
+            text=row.content,
+            object=(
+                ChatObjectPayload(**row.object_payload) if row.object_payload else None
+            ),
+        )
+        for row in rows
+    ]
+    return ChatHistoryResponse(sender_id=sender_id, msgs=msgs)
 
 
-def _build_chat_response(process_result: ProcessResult)->ChatResponse:
-    """将ProcessResult转换为ChatResponse（领域模型-->交互模型）"""
-    return ChatResponse(
-        sender_id=process_result.sender_id,
-        msg_id=process_result.msg_id,
-        msgs=[
-            BotMsgResponse(
-                text=bot_msg.text,
-                object=(
-                    ChatObjectPayload(**bot_msg.object.to_dict())
-                    if bot_msg.object
-                    else None
-                ),
-            )
-            for bot_msg in process_result.msgs
-
-def _build_user_message(chat_request: ChatRequest)->UserMsg:
-    """将ChatRequest转换为UserMsg（交互模型-->领域模型）"""
-    dict_data = {
-        "msg_id": chat_request.msg_id if chat_request.msg_id else str(uuid.uuid4()),
-        "sender_id": chat_request.sender_id,
-        # 补充type
-        "type": MsgType.TEXT if chat_request.text else MsgType.OBJECT,
-        "text": chat_request.text,
-        "object": (
-            {
-                "type": chat_request.object.type,
-                "id": chat_request.object.id,
-                "title": chat_request.object.title,
-                "attributes": chat_request.object.attributes,
-            }
-            if chat_request.object
-            else None
-        ),
+@router.get("/api/digital-human/credentials")
+async def digital_human_credentials() -> dict:
+    return {
+        "app_id": settings.digital_human_app_id,
+        "app_secret": settings.digital_human_app_secret,
+        "gateway_server": settings.digital_human_gateway_server,
     }
-    return UserMsg.from_dict(dict_data)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-@router.post("/api/chat/history", response_model=ChatHistoryResponse)
-async def chat_history():
-    pass

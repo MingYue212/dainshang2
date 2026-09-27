@@ -1,51 +1,43 @@
+"""交互模型：与 V1 atguigu.api.schemas 字段级兼容（SPEC 14.1，契约速查 A1）。"""
+
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
-class ChatObjPayload(BaseModel):
-    """对话对象"""
-
-    type: str # 要知道是商品还是订单
-    obj_id: str # 哪个商品或者订单
+class ChatObjectPayload(BaseModel):
+    type: str  # "order" | "product"
+    id: str
     title: str | None = None
-    description: dict[str, Any] = {}
+    attributes: dict[str, Any] = Field(default_factory=dict)
 
 
 class ChatRequest(BaseModel):
-    """对话请求"""
-
-    sender_id: str # 谁发送的消息
+    sender_id: str
     msg_id: str | None = None
     text: str | None = None
-    obj: ChatObjPayload | None = None
+    object: ChatObjectPayload | None = None
 
 
-class BotMsg(BaseModel):
-    """机器人消息"""
-
+class BotMsgResponse(BaseModel):
     text: str | None = None
-    obj: ChatObjPayload | None = None
+    object: ChatObjectPayload | None = None
 
 
 class ChatResponse(BaseModel):
-    """对话响应"""
-
-    sender_id: str # 响应给谁
-    msg_id: str # 消息id
-    msgs: list[BotMsg]
+    sender_id: str
+    msg_id: str
+    msgs: list[BotMsgResponse]
 
 
 class HistoryMsgResponse(BaseModel):
-    """对话历史消息响应"""
-
-    role: str # 是用户还是机器人
+    session_id: str
+    role: str  # "user" | "bot"（V1 前端对未知 role 兜底为 bot）
+    create_time: float
     text: str | None = None
-    obj: ChatObjPayload | None = None
+    object: ChatObjectPayload | None = None
 
 
 class ChatHistoryResponse(BaseModel):
-    """对话历史响应"""
-
-    sender_id: str # 响应给谁
+    sender_id: str
     msgs: list[HistoryMsgResponse]
