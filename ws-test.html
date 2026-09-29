@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>电商小二 V2 · 真流式演示（ws-test）</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft YaHei", sans-serif; background: #0f1117; color: #e6e6e6;
+         display: flex; justify-content: center; padding: 24px; }
+  .app { width: 720px; display: flex; flex-direction: column; gap: 12px; }
+  h1 { font-size: 18px; color: #7aa2ff; }
+  .bar { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+  select, input[type=text] { background: #1a1d27; color: #e6e6e6; border: 1px solid #2a2e3d;
+         border-radius: 8px; padding: 8px 10px; }
+  input[type=text] { flex: 1; }
+  button { background: #2f54eb; color: white; border: none; border-radius: 8px;
+           padding: 8px 16px; cursor: pointer; }
+  button:disabled { background: #444; cursor: not-allowed; }
+  #chat { height: 460px; overflow-y: auto; background: #14161f; border: 1px solid #2a2e3d;
+          border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 82%; padding: 9px 12px; border-radius: 12px; font-size: 14px;
+         line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+  .user { align-self: flex-end; background: #2f54eb; }
+  .bot  { align-self: flex-start; background: #1f2433; border: 1px solid #2a2e3d; }
+  .sys  { align-self: center; color: #8a8f9d; font-size: 12px; }
+  .cursor::after { content: "▍"; animation: blink 1s infinite; color: #7aa2ff; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .card { border: 1px solid #3a415a; border-radius: 10px; padding: 10px; margin-top: 6px;
+          background: #171b26; font-size: 13px; }
+  .card b { color: #ffd666; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 6px; font-size: 12px;
+         background: #233; margin-right: 6px; }
+  #wsState { font-size: 12px; color: #8a8f9d; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>电商小二 V2 · 真流式演示（ws-test.html，不动 Vue 工程）</h1>
+  <div class="bar">
+    <span>用户：</span>
+    <select id="sender">
+      <option>u1001</option><option>u1002</option><option>u1003</option>
+    </select>
+    <span id="wsState">未连接</span>
+    <button id="histBtn" onclick="loadHistory()">拉历史</button>
+  </div>
+  <div id="chat"></div>
+  <div class="bar">
+    <input type="text" id="input" placeholder="输入消息，回车发送（演示：点过卡片后可用对象消息按钮）"
+           onkeydown="if(event.key==='Enter')send()">
+    <button id="sendBtn" onclick="send()">发送</button>
+  </div>
+  <div class="bar">
+    <span style="color:#8a8f9d">对象消息模拟：</span>
+    <button onclick="sendCard('order')">点订单卡片</button>
+    <button onclick="sendCard('product')">点商品卡片</button>
+  </div>
+</div>
+
+<script>
+const chat = document.getElementById('chat');
+const wsState = document.getElementById('wsState');
+let ws = null;
+let streamingBubble = null;   // 当前流式输出的气泡
+
+function connect() {
+  ws = new WebSocket('ws://127.0.0.1:18082/ws/chat');
+  ws.onopen = () => wsState.textContent = '已连接';
+  ws.onclose = () => { wsState.textContent = '已断开，3s 后重连'; setTimeout(connect, 3000); };
+  ws.onerror = () => wsState.textContent = '连接错误';
+  ws.onmessage = (ev) => handle(JSON.parse(ev.data));
+}
+connect();
+
+function addMsg(cls, text) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + cls;
+  div.textContent = text;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return div;
+}
+
+function renderCard(obj) {
+  if (!obj) return null;
+  const attrs = obj.attributes || {};
+  const div = document.createElement('div');
+  div.className = 'msg bot';
+  const kind = obj.type === 'order' ? '📦 订单' : '🛒 商品';
+  let lines = `<span class="tag">${kind}</span><b>${obj.id}</b>`;
+  if (obj.title) lines += `<br>${obj.title}`;
+  if (attrs.status !== undefined) lines += `<br>状态：${attrs.status}`;
+  if (attrs.amount !== undefined) lines += `<br>金额：￥${attrs.amount}`;
+  if (attrs.price !== undefined) lines += `<br>价格：￥${attrs.price}`;
+  div.innerHTML = lines;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return div;
+}
+
+function handle(ev) {
+  if (ev.type === 'status') {
+    if (ev.data.status === 'thinking') {
+      streamingBubble = addMsg('bot cursor', '思考中…');
+    } else if (ev.data.status === 'done') {
+      if (streamingBubble) streamingBubble.classList.remove('cursor');
+      streamingBubble = null;
+    }
+  } else if (ev.type === 'bot_message_delta') {
+    if (!streamingBubble) streamingBubble = addMsg('bot cursor', '');
+    if (streamingBubble.textContent === '思考中…') streamingBubble.textContent = '';
+    streamingBubble.textContent += ev.data.delta;   // ← 逐字上屏
+    chat.scrollTop = chat.scrollHeight;
+  } else if (ev.type === 'bot_message') {
+    // 完整帧到达：以服务端权威内容定稿（流式只是预览）
+    if (!streamingBubble) streamingBubble = addMsg('bot', '');
+    if (ev.data.text !== null && ev.data.text !== undefined) {
+      streamingBubble.textContent = ev.data.text;
+    } else {
+      streamingBubble.remove();
+      streamingBubble = null;
+    }
+    if (ev.data.object) renderCard(ev.data.object);
+    if (streamingBubble) streamingBubble.classList.remove('cursor');
+    streamingBubble = null;
+  } else if (ev.type === 'error') {
+    addMsg('sys', `⚠️ ${ev.data.code}: ${ev.data.message}`);
+  }
+}
+
+function senderId() { return document.getElementById('sender').value; }
+
+function send() {
+  const input = document.getElementById('input');
+  const text = input.value.trim();
+  if (!text || !ws || ws.readyState !== 1) return;
+  addMsg('user', text);
+  ws.send(JSON.stringify({ type: 'message', sender_id: senderId(), text }));
+  input.value = '';
+}
+
+function sendCard() {
+  if (!ws || ws.readyState !== 1) return;
+  const type = arguments[0];
+  const id = type === 'order' ? 'A20260408002' : 'SKU10002';
+  const title = type === 'order' ? '小米恒温电热水壶 3' : '小米恒温电热水壶 3';
+  const obj = type === 'order'
+    ? { type: 'order', id, title, attributes: { status: '运输中', amount: 149.0 } }
+    : { type: 'product', id, title, attributes: { price: 149.0 } };
+  addMsg('user', `[点选${type === 'order' ? '订单' : '商品'}卡片: ${id}]`);
+  ws.send(JSON.stringify({ type: 'message', sender_id: senderId(), object: obj }));
+}
+
+async function loadHistory() {
+  const r = await fetch(`/api/chat/history?sender_id=${senderId()}`);
+  const data = await r.json();
+  addMsg('sys', `—— 历史消息（${data.msgs.length} 条）——`);
+  for (const m of data.msgs) {
+    if (m.role === 'user') addMsg('user', m.text || '[卡片]');
+    else {
+      addMsg('bot', m.text || '');
+      if (m.object) renderCard(m.object);
+    }
+  }
+}
+</script>
+</body>
+</html>

@@ -551,7 +551,8 @@ query `sender_id`；响应 `{sender_id, msgs:[{session_id?, role:"user"|"bot", c
 | **bot_message_delta** | `{"type":"bot_message_delta","sender_id","msg_id","data":{"delta":"token片段"}}` | **V2 新增**；V1 事件全部保留，无消费方不受影响 |
 | error | `{"type":"error","sender_id","data":{code,message}}` | = V1 |
 
-流式实现：AgentOutput.content 生成阶段按 token 分片推 `bot_message_delta`；结构化校验通过后仍发完整 `bot_message`（前端语义不变）。**逐段出字的可见演示走 `ws-test.html`**（静态页，连 18082 WS），不改 Vue 工程——PRD AC-07/G-08 的判定载体即此页，已在 PRD 13.5 追加修订说明。
+流式实现：AgentOutput.content 生成阶段按 token 分片推 `bot_message_delta`；结构化校验通过后仍发完整 `bot_message`（前端语义不变）。
+> **M3 实测 ✅**：提取器挂在 `on_llm_new_token`（注意 chunk 参数是 ChatGenerationChunk，消息在 `.message` 上）；闲聊 25 delta / 工具轮次 63 delta，拼接==完整帧；解析失败优雅降级为完整帧。证据：tests/test_streaming.py（10 例）+ upgrade-log 第 12 节。**逐段出字的可见演示走 `ws-test.html`**（静态页，连 18082 WS），不改 Vue 工程——PRD AC-07/G-08 的判定载体即此页，已在 PRD 13.5 追加修订说明。
 
 ## 15. 测试计划（tests/ ↔ AC 映射）
 

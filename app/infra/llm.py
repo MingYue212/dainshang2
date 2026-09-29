@@ -21,4 +21,7 @@ def build_model() -> ChatOpenAI:
         timeout=settings.llm_timeout_seconds,
         use_responses_api=False,
         extra_body={"enable_thinking": False},
+        # M3 真流式：全部调用走 SSE 流式聚合；ContentStreamHandler 只提取
+        # 最终结构化输出（AgentOutput 工具）里的 content 增量
+        streaming=True,
     )

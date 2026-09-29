@@ -234,3 +234,21 @@
 **端到端验收（双服务实跑）**：u1003 四轮退款全流程 ✅——意图识别（list_orders）→ 点卡核实（get_order+卡片注入）→ 原因登记（request_refund_confirmation→AWAITING_CONFIRM）→ 确认提交（确认门放行→18081 成功→退款单号 R202609280003446C17CF 回写 COMPLETED）。run 状态链：CLARIFY→CLARIFY→AWAITING_CONFIRM→COMPLETED。此前 u1001 会话中还实测了重复提交 409 幂等话术与 SUPERSEDED 清扫。
 
 **下一步**：M3 真流式（WS bot_message_delta + ws-test.html）。
+
+---
+
+## 12. M3 实施记录（2026-09-28）
+
+**交付**：WS `/ws/chat` 真流式——保留 V1 全部事件（status thinking/cancelled/done、bot_message、error），新增 `bot_message_delta` token 级分片事件；`ws-test.html` 演示页（逐字上屏 + 卡片渲染 + 历史拉取，不动 Vue 工程）；`app/harness/streaming.py` 流式提取器。pytest 57 全绿（新增 10）。
+
+**实现要点（面试素材）**：
+1. **结构化输出的流式提取**：ToolStrategy 的最终回答以 AgentOutput 工具调用的 JSON args 流式返回——直接把 JSON 推给前端会泄漏结构骨架。用字符级状态机只提取顶层 `content` 字段的解码文本（处理 `\n`/`\"`/`\uXXXX` 转义跨分片、嵌套对象干扰、任意分片粒度），单测 10 例锁定（含逐字符、随机分片、跨分片转义）。
+2. **回调层级坑**：`on_llm_new_token` 的 chunk 参数是 `ChatGenerationChunk`，消息体在 `.message` 上——直接 getattr tool_call_chunks 永远是 None（0 delta 的根因）。
+3. **流式触发**：`_StreamingCallbackHandler` 是 langgraph 内部协议不会自动触发，须实例级 `streaming=True`（`_should_stream` 检查 model_fields_set）。
+4. **M2 回归修复**：bot 文本消息落库调用在重写时丢失（只有卡片分支落库）——chat_messages 自 M2 起缺 bot 行，本次补回。
+
+**端到端验收**：T1 闲聊 25 delta、T2 工具调用轮次 63 delta，均拼接==完整帧；cancel 回执与 V1 一致；优雅降级路径保留（解析失败→无 delta→完整帧兜底）。
+
+**已知问题（M5 处理）**：pending 摘要注入下，纯闲聊消息偶尔被模型带偏去重新请求退款确认（提示词遵循度问题，交给评测集量化后调优）。
+
+**里程碑调整**：M4（RAG 壳）已随 M2 的 search_knowledge + FAQProvider 完成，跳过；下一步 **M5 评测**（50 条题库 + runner + LLM-judge + 双版对比报告）。

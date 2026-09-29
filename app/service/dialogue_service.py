@@ -5,6 +5,7 @@ SUPERSEDED 清扫、校验耗尽降级。
 """
 
 import time
+from collections.abc import Awaitable, Callable
 
 from app.conf.config import settings
 from app.domain.enums import RunState
@@ -30,7 +31,11 @@ VALIDATION_DECLINE = "抱歉，这个问题我暂时无法给出可靠答复，�
 
 
 async def process_chat(
-    sender_id: str, msg_id: str, text: str | None, obj: MsgObject | None
+    sender_id: str,
+    msg_id: str,
+    text: str | None,
+    obj: MsgObject | None,
+    on_delta: "Callable[[str], Awaitable[None]] | None" = None,
 ) -> ProcessResult:
     t0 = time.perf_counter()
     obj_payload = obj.model_dump() if obj else None
@@ -73,7 +78,7 @@ async def process_chat(
     )
     messages = compile_messages(history, text, obj_payload, pending_summary)
     try:
-        outcome = await execute_run(run.id, sender_id, messages)
+        outcome = await execute_run(run.id, sender_id, messages, on_delta=on_delta)
     except AgentExecutionError as exc:
         latency_ms = int((time.perf_counter() - t0) * 1000)
         async with SessionLocal() as session:
@@ -128,6 +133,15 @@ async def process_chat(
                 latency_ms=latency_ms,
                 correction_attempts=outcome.correction_attempts,
             )
+
+        # bot 文本回复落库（M2 回归修复：此前只在卡片分支落库，文本回复丢失）
+        await save_message(
+            session,
+            conversation_id=sender_id,
+            role="bot",
+            content=outcome.output.content,
+            run_id=run.id,
+        )
 
         # 页面动作：服务端拼装卡片（校验已保证资源核实过）
         if outcome.output.page_action is not None:

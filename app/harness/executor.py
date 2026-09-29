@@ -4,9 +4,12 @@ M2 实施精化（upgrade-log 第 11 节）：
 - 确认请求走显式工具 request_refund_confirmation（工具内硬校验订单已核实）；
   executor 通过扫描本 Run 快照检测确认请求 → 置 AWAITING_CONFIRM；
 - 百炼对"连续重复的工具调用"返回 400：捕获后转为一次纠错反馈重试，而非直接失败。
+
+M3：on_delta 提供时挂 ContentStreamHandler，最终回答的 content 增量实时回调（WS 真流式）。
 """
 
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from langchain.agents.middleware.tool_call_limit import ToolCallLimitExceededError
@@ -23,6 +26,7 @@ from app.errors import (
     TerminalErrorCode,
 )
 from app.harness.runtime import AgentRuntimeContext
+from app.harness.streaming import ContentStreamHandler
 from app.harness.tool_executor import current_conversation_id, current_run_id
 from app.infra.db import SessionLocal
 from app.memory.repository import load_tool_snapshots
@@ -85,11 +89,17 @@ async def _load_snapshots(run_id: int):
 
 
 async def execute_run(
-    run_id: int, conversation_id: str, messages: list[BaseMessage]
+    run_id: int,
+    conversation_id: str,
+    messages: list[BaseMessage],
+    on_delta: Callable[[str], Awaitable[None]] | None = None,
 ) -> RunOutcome:
     run_token = current_run_id.set(run_id)
     conv_token = current_conversation_id.set(conversation_id)
     usage_cb = UsageMetadataCallbackHandler()
+    callbacks: list = [usage_cb]
+    if on_delta is not None:
+        callbacks.append(ContentStreamHandler(on_delta))
     messages = list(messages)
     context = AgentRuntimeContext(
         run_id=run_id, conversation_id=conversation_id, user_id=conversation_id
@@ -101,7 +111,7 @@ async def execute_run(
                 result = await get_agent().ainvoke(
                     {"messages": messages},
                     context=context,
-                    config={"callbacks": [usage_cb]},
+                    config={"callbacks": callbacks},
                 )
             except ToolCallLimitExceededError:
                 in_toks, out_toks = _tokens(usage_cb)
