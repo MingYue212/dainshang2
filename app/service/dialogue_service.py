@@ -4,6 +4,7 @@ M2 新增：待确认摘要注入、confirmation → AWAITING_CONFIRM、页面�
 SUPERSEDED 清扫、校验耗尽降级。
 """
 
+import logging
 import time
 from collections.abc import Awaitable, Callable
 
@@ -80,6 +81,7 @@ async def process_chat(
     try:
         outcome = await execute_run(run.id, sender_id, messages, on_delta=on_delta)
     except AgentExecutionError as exc:
+        logging.getLogger(__name__).exception("Run 执行异常 run=%s sender=%s", run.id, sender_id)
         latency_ms = int((time.perf_counter() - t0) * 1000)
         async with SessionLocal() as session:
             run_row = await session.get(AgentRun, run.id)

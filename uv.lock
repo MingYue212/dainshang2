@@ -334,6 +334,7 @@ dependencies = [
     { name = "langchain" },
     { name = "langchain-openai" },
     { name = "pydantic-settings" },
+    { name = "pyyaml" },
     { name = "sqlalchemy" },
 ]
 
@@ -352,6 +353,7 @@ requires-dist = [
     { name = "langchain", specifier = ">=1.3.18" },
     { name = "langchain-openai", specifier = ">=1.6.0" },
     { name = "pydantic-settings", specifier = ">=2.15.0" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "sqlalchemy", specifier = ">=2.0.52" },
 ]
 
