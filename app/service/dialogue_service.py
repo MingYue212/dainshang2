@@ -100,6 +100,29 @@ async def process_chat(
 
     # 3) 回写 Run 终态 + bot 消息（含动作卡片）+ SUPERSEDED 清扫
     latency_ms = int((time.perf_counter() - t0) * 1000)
+    if outcome.state == RunState.FAILED:
+        # 纠错耗尽（output 为 None）：稳定降级话术
+        bot_msgs = [BotMsg(text=VALIDATION_DECLINE)]
+        async with SessionLocal() as session:
+            run_row = await session.get(AgentRun, run.id)
+            await fail_run(
+                session,
+                run_row,
+                error=TerminalErrorCode(outcome.error),
+                latency_ms=latency_ms,
+                correction_attempts=outcome.correction_attempts,
+            )
+            await save_message(
+                session,
+                conversation_id=sender_id,
+                role="bot",
+                content=VALIDATION_DECLINE,
+                run_id=run.id,
+            )
+            await supersede_stale_pendings(session, sender_id, exclude_run_id=run.id)
+            await session.commit()
+        return ProcessResult(sender_id=sender_id, msg_id=msg_id, msgs=bot_msgs)
+
     assert outcome.output is not None
     reply_type = outcome.output.reply_type.value
     bot_msgs: list[BotMsg] = [BotMsg(text=outcome.output.content)]

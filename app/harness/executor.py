@@ -8,6 +8,8 @@ M2 实施精化（upgrade-log 第 11 节）：
 M3：on_delta 提供时挂 ContentStreamHandler，最终回答的 content 增量实时回调（WS 真流式）。
 """
 
+import logging
+import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -86,6 +88,36 @@ def _pending_request(snapshots) -> dict | None:
 async def _load_snapshots(run_id: int):
     async with SessionLocal() as session:
         return await load_tool_snapshots(session, run_id)
+
+
+def _normalize_output(result: dict) -> AgentOutput | None:
+    """结构化输出归一化（M5，模型切换 qwen3.7-max 后的实测兜底）：
+
+    1. ToolStrategy 生效 → structured_response 直接可用（qwen3.8 路径）；
+    2. 模型偶发不响应强制结构化调用（3.7 实测）→ 尝试把最终文本按 JSON 解析；
+    3. 仍是纯文本 → 包装为 ANSWER——事实检验/动作白名单等护栏照常生效，
+       仅损失 page_action 表达力（纯文本本就无卡片）。返回 None 表示回复为空。
+    """
+    sr = result.get("structured_response")
+    if isinstance(sr, AgentOutput):
+        return sr
+    messages = result.get("messages") or []
+    last = messages[-1] if messages else None
+    content = getattr(last, "content", "")
+    text = content if isinstance(content, str) else str(content or "")
+    if not text.strip():
+        return None
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = re.sub(r"^```(json)?|```$", "", stripped, flags=re.M).strip()
+    try:
+        return AgentOutput.model_validate_json(stripped)
+    except Exception:  # noqa: BLE001——非 JSON 纯文本走包装
+        pass
+    logging.getLogger(__name__).warning(
+        "structured_response 缺失，纯文本包装为 ANSWER（模型未遵循强制结构化调用）"
+    )
+    return AgentOutput(reply_type=ReplyType.ANSWER, content=text)
 
 
 async def execute_run(
@@ -169,12 +201,16 @@ async def execute_run(
                     continue
                 raise
             attempts += 1
-            output: AgentOutput = result["structured_response"]
+            output = _normalize_output(result)
             snapshots = await _load_snapshots(run_id)
-            if output.reply_type == ReplyType.ANSWER:
+            if output is not None and output.reply_type == ReplyType.ANSWER:
                 output = AnswerValidator.maybe_degrade(output, snapshots)
             in_toks, out_toks = _tokens(usage_cb)
             try:
+                if output is None:
+                    raise AgentOutputValidationError(
+                        CorrectableErrorCode.MODEL_OUTPUT_INVALID, "回复为空"
+                    )
                 AgentOutputValidator.validate(output, snapshots)
             except AgentOutputValidationError as exc:
                 if attempts > settings.max_correction_attempts:

@@ -80,7 +80,17 @@ uv run python evals/report.py                    # 生成 docs/eval-report.md
 
 评测集：50 条 · 六维度（正常路径 12 / 缺槽位反问 8 / 打断恢复 8 / 多意图 6 / 越界与诱导 10 / 闲聊知识 6）。
 判分 = 规则断言（确定性事实，可复现）+ LLM-judge（主观质量 1~5，temperature=0）。
-对比结果见 [docs/eval-report.md](docs/eval-report.md)。
+**实测结果（glm-5.2 · 双版同模型同题库同判分）**：
+
+| 指标 | V1 workflow | V2 智能体 |
+|---|---|---|
+| 规则断言通过 | 9/50 (18%) | **26/50 (52%)** |
+| LLM-judge 均分（1~5） | 3.28 | **3.82** |
+| 正常路径 | 2/12 | **10/12** |
+| 打断恢复 | 0/8 | **4/8** |
+| 多意图混合 | 0/6 | **2/6** |
+
+详见 [docs/eval-report.md](docs/eval-report.md)。
 
 ## 文档链
 

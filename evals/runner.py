@@ -84,8 +84,10 @@ def evaluate(expect: dict, bot_texts: list[str]) -> tuple[bool, list[str]]:
         _check(f"final_not_regex[{p}]", not re.search(p, final or ""))
     for k in expect.get("final_contains_all", []):
         _check(f"final_contains_all[{k}]", norm(k) in n_final)
-    for k in expect.get("final_contains_any", []):
-        _check(f"final_contains_any[{k}]", any(norm(x) in n_final for x in [k]))
+    keys_any = expect.get("final_contains_any", [])
+    if keys_any:
+        # 组内任一命中即过（bug 修复：此前误写成逐项 must-all）
+        _check(f"final_contains_any{keys_any}", any(norm(k) in n_final for k in keys_any))
     for group in expect.get("final_contains_groups", []):
         _check(f"final_contains_groups[{group}]", any(norm(k) in n_final for k in group))
     for k in expect.get("final_not_contains", []):
@@ -122,7 +124,11 @@ def run_case(client: httpx.Client, case: dict, clean: bool, scope: str = "both")
         for attempt in range(2):  # 网络级失败重试 1 次
             try:
                 resp = client.post("/api/chat", json=payload, timeout=180)
-                body = resp.json()
+                try:
+                    body = resp.json()
+                except Exception:
+                    # 记录非 JSON 响应体（如 V1 内部错误的 HTML/空体），便于归因
+                    raise RuntimeError(f"HTTP {resp.status_code} 非 JSON 响应: {resp.text[:120]}")
                 bot_texts = [
                     m.get("text") or ""
                     for m in body.get("msgs", [])
